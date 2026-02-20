@@ -1,0 +1,104 @@
+import json
+import logging
+from django.conf import settings
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from rest_framework.decorators import api_view, authentication_classes, permission_classes
+from rest_framework.permissions import AllowAny
+from . import services
+from .models import Message
+from .chatwoot_services import ChatwootAPI
+
+logger = logging.getLogger(__name__)
+
+@csrf_exempt
+@api_view(['POST'])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def webhook_handler(request):
+    """
+    Handler centralizado para Agent Bot do Chatwoot.
+    Processa mensagens de QUALQUER canal conectado (WhatsApp, Web, Telegram, etc).
+    """
+    try:
+        payload = json.loads(request.body)
+        
+        # --- 1. FILTROS DE SEGURANÇA E RELEVÂNCIA ---
+        
+        # Só processamos eventos de nova mensagem
+        if payload.get('event') != 'message_created':
+            return JsonResponse({'status': 'ignored: not message_created'}, status=200)
+            
+        # Verifica se a mensagem é "incoming" (do usuário) e se o remetente é um contato real
+        # Isso é crucial para evitar que o bot responda a si mesmo ou a notas internas
+        message_type = payload.get('message_type')
+        sender_type = payload.get('sender', {}).get('type')
+        
+        if message_type != 'incoming' or sender_type != 'contact':
+            return JsonResponse({'status': 'ignored: not an incoming user message'}, status=200)
+
+        # Dados principais da mensagem
+        conversation_id = payload.get('conversation', {}).get('id')
+        message_content = payload.get('content')
+        chatwoot_message_id = payload.get('id')
+
+        # Se não tem conteúdo ou ID, ignora
+        if not message_content or not conversation_id:
+            return JsonResponse({'status': 'ignored: empty content'}, status=200)
+
+        logger.info(f"Recebido do Chatwoot (Conv {conversation_id}): '{message_content}'")
+
+        # --- 2. CONTROLE DE IDEMPOTÊNCIA (Opcional mas recomendado) ---
+        # Evita processar duplicatas se o Chatwoot reenviar o webhook
+        # Se você ainda não tem o campo 'message_id_external' no model, pode comentar estas 3 linhas abaixo:
+        # if Message.objects.filter(channel='chatwoot', message_id_external=str(chatwoot_message_id)).exists():
+        #     logger.info(f"Mensagem {chatwoot_message_id} já processada anteriormente.")
+        #     return JsonResponse({'status': 'ignored: duplicate'}, status=200)
+
+        # --- 3. PERSISTÊNCIA (Mensagem do Usuário) ---
+        Message.objects.create(
+            conversation_id=str(conversation_id),
+            channel='chatwoot',
+            sender='user',
+            text=message_content
+            # message_id_external=str(chatwoot_message_id) # Descomente se adicionar o campo no model
+        )
+
+        # --- 4. INTELIGÊNCIA (Gemini) ---
+        
+        # Busca histórico para contexto
+        conversation_history = Message.objects.filter(
+            channel='chatwoot', 
+            conversation_id=str(conversation_id)
+        ).order_by('created_at')
+
+        # Prompt do sistema (ajustável no settings.py)
+        system_prompt = getattr(settings, 'AI_ORGANIZATION_PROMPT', 
+            "Você é um assistente virtual útil e direto para uma organização social.")
+        
+        # Chama a IA
+        resposta_do_bot = services.get_ai_response(conversation_history, system_prompt=system_prompt)
+
+        # --- 5. RESPOSTA ---
+        
+        # Salva a resposta no banco local
+        Message.objects.create(
+            conversation_id=str(conversation_id),
+            channel='chatwoot',
+            sender='bot',
+            text=resposta_do_bot
+        )
+        
+        # Envia para a API do Chatwoot
+        chatwoot_api = ChatwootAPI()
+        chatwoot_api.create_message(conversation_id, resposta_do_bot)
+
+        return JsonResponse({'status': 'success', 'reply': 'sent'}, status=200)
+
+    except json.JSONDecodeError:
+        logger.error("Payload inválido no Webhook.")
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    except Exception as e:
+        logger.error(f"Erro no Webhook Chatwoot: {e}", exc_info=True)
+        # Retornamos 200 para evitar que o Chatwoot fique tentando reenviar infinitamente em caso de erro interno nosso
+        return JsonResponse({'status': 'error_handled'}, status=200)

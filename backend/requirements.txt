@@ -1,0 +1,11 @@
+Django>=5.0
+requests
+gunicorn
+psycopg2-binary
+django-extensions
+google-generativeai
+twilio
+djangorestframework
+openai>=1.0.0
+whitenoise
+beautifulsoup4

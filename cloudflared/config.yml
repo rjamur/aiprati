@@ -1,0 +1,11 @@
+ingress:
+  # Rota para o seu serviço Django
+  - hostname: bot-fantasma.trycloudflare.com
+    service: http://django:8000
+    
+  # Rota para o seu serviço Rails/Chatwoot
+  - hostname: rails-fantasma.trycloudflare.com
+    service: http://rails:3000
+    
+  # Rota padrão para bloquear qualquer outro tráfego
+  - service: http_status:404
