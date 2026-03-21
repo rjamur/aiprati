@@ -73,6 +73,16 @@ services:
     networks:
       - internal_network
 
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: aiprati-dev-cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${DEV_CLOUDFLARE_TUNNEL_TOKEN}
+    networks:
+      - internal_network
+
 volumes:
   dev_postgres_data:
   n8n_data:
