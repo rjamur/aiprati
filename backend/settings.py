@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 
 from pathlib import Path
 import os
+from decouple import config, Csv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -27,11 +28,12 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'uma-chave-secreta-padrao-para-desenvo
 # A conversão para booleano é importante. 'False' como string é True.
 DEBUG = os.environ.get('DEBUG', 'True').lower() in ('true', '1', 't')
 
-# Em produção, esta lista deve conter o seu domínio. Ex: 'meusite.com,www.meusite.com'
-# O valor é lido do .env e transformado em uma lista de strings.
-ALLOWED_HOSTS_STRING = os.environ.get('ALLOWED_HOSTS', '*')
-ALLOWED_HOSTS = [host.strip() for host in ALLOWED_HOSTS_STRING.split(',') if host.strip()]
+# Se não achar no .env, usa '*' como padrão.
+# O Csv() já faz o split por vírgula e o strip() para você.
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='*', cast=Csv())
 
+# Para o CSRF
+CSRF_TRUSTED_ORIGINS = config('CSRF_TRUSTED_ORIGINS', default='https://localhost', cast=Csv())
 
 # Application definition
 

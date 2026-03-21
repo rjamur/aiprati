@@ -9,3 +9,4 @@ djangorestframework
 openai>=1.0.0
 whitenoise
 beautifulsoup4
+python-decouple
