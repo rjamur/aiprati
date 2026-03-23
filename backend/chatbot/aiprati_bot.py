@@ -75,18 +75,29 @@ ESTILO DE ESCRITA:
 def enviar_para_chatwoot(conversation_id, account_id, text):
     """Envia mensagem para o Chatwoot usando o token do Agent Bot"""
     try:
-        url = f"https://chat.aiprati.com.br/api/v1/accounts/{account_id}/conversations/{conversation_id}/messages"
-        bot_token = os.environ.get("CHATWOOT_BOT_TOKEN_AIPRATI", os.environ.get("CHATWOOT_BOT_TOKEN", "LptzThPMMHWzMnqcERJvdwoL"))
+        # Pega a base_url e usa .rstrip('/') para evitar barras duplas 
+        # caso alguém coloque "http://chatwoot:3000/" no arquivo .env
+        base_url = os.environ.get("CHATWOOT_BASE_URL", "http://chatwoot:3000").rstrip('/')
+        
+        # Insere a base_url dinamicamente na f-string
+        url = f"{base_url}/api/v1/accounts/{account_id}/conversations/{conversation_id}/messages"
+        
+        # Removemos o token chumbado. Se não achar o primeiro, tenta o segundo.
+        bot_token = os.environ.get("CHATWOOT_BOT_TOKEN_AIPRATI") or os.environ.get("CHATWOOT_BOT_TOKEN")
+        
         headers = {
             "api_access_token": bot_token,
             "Content-Type": "application/json"
         }
+
         payload = {
             "content": text,
             "message_type": "outgoing",
             "private": False
         }
+
         response = requests.post(url, headers=headers, json=payload, timeout=10)
+
         print(f"AIPRATI - Chatwoot response: {response.status_code}")
         response.raise_for_status()
         return response.json()
@@ -98,41 +109,58 @@ def enviar_para_chatwoot(conversation_id, account_id, text):
 def atualizar_contato_chatwoot(account_id, conversation_id, nome=None, pronomes=None):
     """Atualiza o contato no Chatwoot com nome e/ou custom attributes"""
     try:
-        api_token = os.environ.get("CHATWOOT_API_TOKEN", "EvZGb4rPXHH3ccLEiNmoSDLq")
-        conv_url = f"https://chat.aiprati.com.br/api/v1/accounts/{account_id}/conversations/{conversation_id}"
+        # Puxa a URL e remove barras sobrando no final
+        base_url = os.environ.get("CHATWOOT_BASE_URL", "http://chatwoot:3000").rstrip('/')
+
+        # Puxa o token seguro do ambiente
+        api_token = os.environ.get("CHATWOOT_API_TOKEN")
+
+        if not api_token:
+            print("AIPRATI - CHATWOOT_API_TOKEN não configurada no .env!")
+            return None
+
+        # Monta a URL da conversa dinamicamente
+        conv_url = f"{base_url}/api/v1/accounts/{account_id}/conversations/{conversation_id}"
+
         headers = {
             "api_access_token": api_token,
             "Content-Type": "application/json"
         }
+
+        # Busca a conversa para achar o ID do contato
         conv_response = requests.get(conv_url, headers=headers, timeout=10)
+        conv_response.raise_for_status() # Lança erro se não for 200 OK
         conv_data = conv_response.json()
-        
+
         contact_id = None
         if "meta" in conv_data and "sender" in conv_data["meta"]:
             contact_id = conv_data["meta"]["sender"].get("id")
-        
+
         if not contact_id:
             print(f"AIPRATI - Nao encontrou contact_id para conversa {conversation_id}")
             return None
-        
-        contact_url = f"https://chat.aiprati.com.br/api/v1/accounts/{account_id}/contacts/{contact_id}"
-        
+
+        # Monta a URL do contato dinamicamente
+        contact_url = f"{base_url}/api/v1/accounts/{account_id}/contacts/{contact_id}"
+
         update_payload = {}
         if nome:
             update_payload["name"] = nome
-        
+
         custom_attrs = {}
         if pronomes:
             custom_attrs["pronomes"] = pronomes
+
         if custom_attrs:
             update_payload["custom_attributes"] = custom_attrs
-        
+
         if update_payload:
             response = requests.put(contact_url, headers=headers, json=update_payload, timeout=10)
             print(f"AIPRATI - Contato atualizado: {response.status_code}")
             return response.json()
-        
+
         return None
+
     except Exception as e:
         print(f"AIPRATI - ERRO atualizar contato: {e}")
         return None
