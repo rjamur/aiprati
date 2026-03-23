@@ -33,6 +33,19 @@ ALLOWED_HOSTS_STRING = os.environ.get('ALLOWED_HOSTS', '*')
 ALLOWED_HOSTS = [host.strip() for host in ALLOWED_HOSTS_STRING.split(',') if host.strip()]
 
 
+
+# Allowed Hosts
+# allowed_raw = os.environ.get('ALLOWED_HOSTS', '*')
+# ALLOWED_HOSTS = [host.strip() for host in allowed_raw.split(',') if host.strip()]
+
+# CSRF Trusted Origins
+csrf_raw = os.environ.get('CSRF_TRUSTED_ORIGINS', 'https://engine.aiprati.com.br')
+CSRF_TRUSTED_ORIGINS = [url.strip() for url in csrf_raw.split(',') if url.strip()]
+
+# Proxy Header para o túnel
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+
 # Application definition
 
 INSTALLED_APPS = [
